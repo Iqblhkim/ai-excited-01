@@ -1,12 +1,17 @@
 # A Whale in the Aurora Sky
 
+[![make.fun · ai-excited-01](https://make.fun/badge/ai-excited-01.svg)](https://make.fun/bounty/ai-excited-01?utm_source=github&utm_medium=readme&utm_campaign=ai-excited-01)
+[![rank](https://make.fun/badge/ai-excited-01/Iqblhkim/ai-excited-01/rank.svg)](https://make.fun/bounty/ai-excited-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=ai-excited-01)
+[![reward](https://make.fun/badge/ai-excited-01/Iqblhkim/ai-excited-01/reward.svg)](https://make.fun/bounty/ai-excited-01?utm_source=github&utm_medium=readme&utm_campaign=ai-excited-01)
+
 A giant whale swims through an aurora-lit night sky above a neon city at
 dusk — a whale in the sky, not the sea. The surprise of scale, the diagonal
 arc of its body, and the glow of the aurora and the city all drive toward
 one moment of awe.
 
 Made for the make.fun competition **"Make the AI judge excited"**
-(`ai-excited-01`).
+(`ai-excited-01`) — see the bounty at
+[https://make.fun/bounty/ai-excited-01](https://make.fun/bounty/ai-excited-01).
 
 ## How it works
 
