@@ -1,7 +1,8 @@
-"""Whale breaching through an aurora sky above a neon city.
+"""Whale Aurora Neon City — ai-excited-01 round 3.
 
-Pure Python 3.13 stdlib (zlib, struct, math, random with a fixed seed).
-Writes a deterministic 1024x1024 PNG to MAKEFUN_OUTPUT_DIR/entry.png.
+A giant humpback whale breaching upward through a glowing aurora sky
+above a neon city at night. Pure Python 3.13 standard library only.
+Deterministic: fixed seed, two runs produce byte-identical PNGs.
 """
 import math
 import os
@@ -9,353 +10,290 @@ import random
 import struct
 import zlib
 
-W = 1024
-H = 1024
+W, H = 1024, 1024
 SEED = 20261116
-
-rng = random.Random(SEED)
-
-
-def clamp(v, lo=0.0, hi=255.0):
-    return lo if v < lo else hi if v > hi else v
+HORIZON = 790  # waterline / city base
 
 
-def lerp(a, b, t):
-    return a + (b - a) * t
+def clamp(v, lo=0, hi=255):
+    return lo if v < lo else hi if v > hi else int(v)
 
 
-def make_canvas():
-    # Row-major RGB float buffer, flat list of floats.
-    return [0.0] * (W * H * 3)
+class Img:
+    def __init__(self, w, h):
+        self.w = w
+        self.h = h
+        self.px = bytearray(w * h * 3)
+
+    def set(self, x, y, r, g, b):
+        if 0 <= x < self.w and 0 <= y < self.h:
+            i = (y * self.w + x) * 3
+            self.px[i] = r
+            self.px[i + 1] = g
+            self.px[i + 2] = b
+
+    def add(self, x, y, r, g, b):
+        if 0 <= x < self.w and 0 <= y < self.h:
+            i = (y * self.w + x) * 3
+            self.px[i] = min(255, self.px[i] + r)
+            self.px[i + 1] = min(255, self.px[i + 1] + g)
+            self.px[i + 2] = min(255, self.px[i + 2] + b)
+
+    def get(self, x, y):
+        i = (y * self.w + x) * 3
+        return self.px[i], self.px[i + 1], self.px[i + 2]
+
+    def png(self, path):
+        raw = bytearray()
+        stride = self.w * 3
+        for y in range(self.h):
+            raw.append(0)
+            raw += self.px[y * stride:(y + 1) * stride]
+        data = zlib.compress(bytes(raw), 6)
+
+        def chunk(typ, payload):
+            c = struct.pack(">I", len(payload)) + typ + payload
+            c += struct.pack(">I", zlib.crc32(typ + payload) & 0xFFFFFFFF)
+            return c
+
+        out = b"\x89PNG\r\n\x1a\n"
+        out += chunk(b"IHDR", struct.pack(">IIBBBBB", self.w, self.h, 8, 2, 0, 0, 0))
+        out += chunk(b"IDAT", data)
+        out += chunk(b"IEND", b"")
+        with open(path, "wb") as f:
+            f.write(out)
 
 
-def put(buf, x, y, r, g, b):
-    if 0 <= x < W and 0 <= y < H:
-        i = (y * W + x) * 3
-        buf[i] = r
-        buf[i + 1] = g
-        buf[i + 2] = b
-
-
-def add(buf, x, y, r, g, b, a=1.0):
-    if 0 <= x < W and 0 <= y < H:
-        i = (y * W + x) * 3
-        buf[i] = clamp(buf[i] + r * a)
-        buf[i + 1] = clamp(buf[i + 1] + g * a)
-        buf[i + 2] = clamp(buf[i + 2] + b * a)
-
-
-def draw_sky(buf):
-    """Deep indigo sky, lighter toward the horizon glow."""
-    for y in range(H):
-        t = y / (H - 1)
-        # top: very dark indigo, horizon (~y=620): warm violet glow
-        r = lerp(6, 58, t ** 1.6)
-        g = lerp(8, 26, t ** 1.6)
-        b = lerp(34, 96, t ** 1.4)
+def draw_sky(img):
+    top = (7, 9, 40)
+    horizon = (40, 28, 92)
+    for y in range(HORIZON):
+        t = y / (HORIZON - 1.0)
+        r = int(top[0] + (horizon[0] - top[0]) * t)
+        g = int(top[1] + (horizon[1] - top[1]) * t)
+        b = int(top[2] + (horizon[2] - top[2]) * t)
+        row = y * W * 3
         for x in range(W):
-            i = (y * W + x) * 3
-            buf[i] = r
-            buf[i + 1] = g
-            buf[i + 2] = b
+            img.px[row + x * 3] = r
+            img.px[row + x * 3 + 1] = g
+            img.px[row + x * 3 + 2] = b
 
 
-def draw_aurora(buf):
-    """Swirling ribbons of green and violet aurora across the upper sky."""
-    bands = [
-        # (base_y, amplitude, wavelength, phase, thickness, color)
-        (120, 46, 320, 0.0, 70, (46, 255, 170)),
-        (190, 60, 260, 1.7, 90, (120, 235, 130)),
-        (270, 70, 380, 3.1, 80, (150, 90, 255)),
-        (340, 52, 300, 5.0, 64, (60, 200, 120)),
+def draw_stars(img, rnd):
+    for _ in range(430):
+        x = rnd.randrange(W)
+        y = rnd.randrange(560)
+        s = rnd.random()
+        v = 130 + int(125 * s)
+        img.add(x, y, v, v, v)
+        if s > 0.90:
+            img.add(x + 1, y, 55, 55, 75)
+            img.add(x, y + 1, 55, 55, 75)
+            img.add(x - 1, y, 40, 40, 55)
+            img.add(x, y - 1, 40, 40, 55)
+
+
+def draw_aurora(img):
+    # Three swirling ribbons: green, violet, teal. Each ribbon is a band
+    # whose centre y wobbles with x; brightness falls off with distance.
+    ribbons = [
+        # (base_y, amp, freq, phase, width, (r, g, b), strength)
+        (150, 70, 0.0042, 0.0, 46, (40, 255, 150), 150),
+        (250, 90, 0.0031, 1.7, 60, (150, 90, 255), 130),
+        (330, 60, 0.0055, 3.4, 38, (50, 220, 230), 100),
     ]
-    for y in range(430):
+    for y in range(0, 520):
         for x in range(W):
-            total_r = total_g = total_b = 0.0
-            for base_y, amp, wl, ph, thick, col in bands:
-                cy = base_y + amp * math.sin(2 * math.pi * x / wl + ph)
-                cy += 0.35 * amp * math.sin(2 * math.pi * x / (wl * 0.37) + ph * 2.3)
+            ar = ag = ab = 0
+            for base, amp, freq, ph, wd, (cr, cg, cb), st in ribbons:
+                cy = base + amp * math.sin(x * freq + ph) + 26 * math.sin(x * 0.011 + ph * 2.3)
                 d = abs(y - cy)
-                if d < thick:
-                    fall = 1.0 - d / thick
-                    fall = fall * fall
-                    # bright core, softer edge; fade with altitude
-                    fade = 1.0 - 0.55 * (y / 430.0)
-                    total_r += col[0] * fall * fade
-                    total_g += col[1] * fall * fade
-                    total_b += col[2] * fall * fade
-            if total_r or total_g or total_b:
-                add(buf, x, y, total_r * 0.55, total_g * 0.55, total_b * 0.55)
+                if d < wd * 2.2:
+                    fall = math.exp(-(d * d) / (2.0 * (wd * 0.55) ** 2))
+                    ar += int(cr * fall * st / 255.0)
+                    ag += int(cg * fall * st / 255.0)
+                    ab += int(cb * fall * st / 255.0)
+            if ar or ag or ab:
+                img.add(x, y, min(ar, 120), min(ag, 150), min(ab, 130))
 
 
-def draw_city(buf):
-    """Dense neon city skyline: dark towers, glowing windows, rooftop beacons."""
-    horizon = 640
-    palette = [(255, 70, 160), (60, 220, 255), (255, 190, 60),
-               (255, 110, 200), (80, 255, 200), (255, 240, 120)]
+def draw_city(img, rnd):
+    palette = [(255, 80, 180), (80, 220, 255), (255, 180, 60),
+               (140, 255, 200), (200, 120, 255)]
+    # Distant hazy skyline first.
     x = 0
-    towers = []
     while x < W:
-        w = rng.randrange(34, 96)
-        h = rng.randrange(80, 260)
-        towers.append((x, w, h))
-        x += w + rng.randrange(2, 10)
-    for (bx, w, h) in towers:
-        top = horizon - h
-        for yy in range(top, horizon):
-            for xx in range(bx, bx + w):
-                # dark blue silhouette, slightly lighter at the top edge
-                shade = 18 + 10 * (1 - (yy - top) / max(1, h))
-                put(buf, xx, yy, shade, shade + 6, shade + 22)
-        # windows
-        for wy in range(top + 8, horizon - 8, 11):
-            for wx in range(bx + 5, bx + w - 5, 8):
-                if rng.random() < 0.55:
-                    c = palette[rng.randrange(len(palette))]
-                    br = 0.75 + 0.25 * rng.random()
-                    for dy in range(6):
+        bw = rnd.randrange(50, 110)
+        top = rnd.randrange(620, 730)
+        for y in range(top, HORIZON):
+            for xx in range(x, min(W, x + bw)):
+                img.set(xx, y, 30, 30, 68)
+        x += bw + rnd.randrange(0, 14)
+    # Main skyline: dark towers with lit windows, lower in the middle
+    # so the breach stays readable against the sky.
+    x = -10
+    while x < W:
+        bw = rnd.randrange(42, 92)
+        mid = 1.0 - abs((x + bw / 2) - W / 2) / (W / 2)
+        top = rnd.randrange(540, 700)
+        if mid > 0.55:
+            top = max(top, 650)
+        for y in range(top, HORIZON):
+            for xx in range(x, min(W, x + bw)):
+                img.set(xx, y, 9, 12, 30)
+        # Lit windows.
+        for wy in range(top + 12, HORIZON - 8, 14):
+            for wx in range(x + 6, min(W, x + bw - 6), 11):
+                if rnd.random() < 0.34:
+                    c = palette[rnd.randrange(len(palette))]
+                    for dy in range(5):
                         for dx in range(6):
-                            add(buf, wx + dx, wy + dy,
-                                c[0] * br, c[1] * br, c[2] * br, 1.0)
-        # rooftop beacon
-        if rng.random() < 0.6:
-            c = palette[rng.randrange(len(palette))]
-            add(buf, bx + w // 2, top - 3, c[0], c[1], c[2], 1.0)
-            add(buf, bx + w // 2 - 1, top - 2, c[0] * 0.5, c[1] * 0.5, c[2] * 0.5)
-            add(buf, bx + w // 2 + 1, top - 2, c[0] * 0.5, c[1] * 0.5, c[2] * 0.5)
-    # city glow band on the horizon
-    for y in range(horizon - 44, horizon + 8):
-        glow = 1.0 - abs(y - horizon) / 52.0
+                            img.set(wx + dx, wy + dy, c[0], c[1], c[2])
+        # Neon sign bar on some towers.
+        if rnd.random() < 0.45:
+            c = palette[rnd.randrange(len(palette))]
+            sy = top + rnd.randrange(18, 60)
+            for xx in range(x + 4, min(W, x + bw - 4)):
+                for dy in range(3):
+                    img.add(xx, sy + dy, c[0] // 2, c[1] // 2, c[2] // 2)
+        # Antenna beacon on tall towers.
+        if top < 600 and rnd.random() < 0.6:
+            bx = x + bw // 2
+            for dy in range(6):
+                img.set(bx, top - dy, 255, 60, 60)
+            img.add(bx, top - 8, 255, 80, 80)
+        x += bw + rnd.randrange(2, 16)
+
+
+def draw_water(img):
+    # Mirror the city above the waterline, rippled and darkened with depth.
+    for y in range(HORIZON, H):
+        depth = (y - HORIZON) / float(H - HORIZON)
+        dim = 0.85 - depth * 0.55
         for x in range(W):
-            add(buf, x, y, 140 * glow, 60 * glow, 170 * glow, 0.6)
-    return towers
-
-
-def draw_water(buf, towers):
-    """Dark water below the city with vertical neon reflections."""
-    top = 640
-    for y in range(top, H):
-        t = (y - top) / (H - top)
-        base_r = lerp(8, 2, t)
-        base_g = lerp(14, 4, t)
-        base_b = lerp(34, 8, t)
-        for x in range(W):
-            i = (y * W + x) * 3
-            buf[i] = base_r
-            buf[i + 1] = base_g
-            buf[i + 2] = base_b
-    # reflected streaks under each tower, wobbling with the waves
-    palette = [(255, 70, 160), (60, 220, 255), (255, 190, 60)]
-    for (bx, w, h) in towers:
-        c = palette[rng.randrange(len(palette))]
-        cx = bx + w // 2
-        for y in range(top + 4, H - 6):
-            t = (y - top) / (H - top)
-            sway = int(14 * math.sin(y * 0.09 + bx) * (0.3 + t))
-            length = max(2, int(w * 0.55 * (1 - t * 0.75)))
-            for dx in range(-length // 2, length // 2):
-                xx = cx + sway + dx
-                br = (0.9 - t * 0.5) * (0.5 + 0.5 * rng.random())
-                add(buf, xx, y, c[0] * br, c[1] * br, c[2] * br, 0.85)
-    # long horizontal neon shimmer lines across the water
-    for _ in range(60):
-        y = rng.randrange(top + 8, H - 4)
-        x0 = rng.randrange(0, W - 200)
-        ln = rng.randrange(60, 220)
-        c = palette[rng.randrange(len(palette))]
-        br = 0.35 + 0.4 * rng.random()
-        for x in range(x0, x0 + ln):
-            add(buf, x, y, c[0] * br, c[1] * br, c[2] * br, 0.7)
-    # moonlight sparkle on the waves
-    for _ in range(260):
-        x = rng.randrange(W)
-        y = rng.randrange(top + 10, H - 4)
-        br = 40 + 90 * rng.random()
-        add(buf, x, y, br * 0.6, br * 0.8, br, 0.7)
-
-
-def fill_ellipse(buf, cx, cy, rx, ry, r, g, b, a=1.0):
-    for yy in range(int(cy - ry), int(cy + ry) + 1):
-        dy = (yy - cy) / max(1.0, ry)
-        if abs(dy) > 1:
-            continue
-        hw = rx * math.sqrt(1 - dy * dy)
-        for xx in range(int(cx - hw), int(cx + hw) + 1):
-            add(buf, xx, yy, r, g, b, a)
-
-
-def whale_spine(t):
-    """Spine point of the breaching whale, t=0 tail, t=1 head."""
-    x = lerp(360, 660, t) + 70 * math.sin(math.pi * t)
-    y = 800 - 540 * (t ** 1.08)
-    return x, y
-
-
-def whale_half_width(t):
-    return 150 * math.sin(math.pi * (0.10 + 0.80 * t)) ** 0.75
-
-
-def draw_whale(buf):
-    # Tail flukes first (behind the body), spreading at the waterline.
-    tx, ty = whale_spine(0.0)
-    fill_ellipse(buf, tx - 95, ty + 30, 120, 34, 44, 78, 140)
-    fill_ellipse(buf, tx + 105, ty + 42, 115, 32, 40, 70, 128)
-    fill_ellipse(buf, tx - 95, ty + 28, 105, 26, 60, 100, 165)
-    fill_ellipse(buf, tx + 105, ty + 40, 100, 24, 56, 92, 155)
-
-    # Body: scanline fill along the spine.
-    pts = []
-    for k in range(401):
-        t = k / 400.0
-        pts.append((whale_spine(t), whale_half_width(t)))
-    y_min = int(min(p[0][1] - p[1] for p in pts))
-    y_max = int(max(p[0][1] + p[1] for p in pts))
-    for y in range(max(0, y_min), min(H, y_max) + 1):
-        # find spine segment whose y brackets this row (y decreases with t)
-        cx = None
-        hw = None
-        for k in range(400):
-            (x0, y0), w0 = pts[k]
-            (x1, y1), w1 = pts[k + 1]
-            if (y0 >= y >= y1) or (y1 >= y >= y0):
-                f = 0.0 if y0 == y1 else (y0 - y) / (y0 - y1)
-                cx = lerp(x0, x1, f)
-                hw = lerp(w0, w1, f)
-                break
-        if cx is None:
-            continue
-        for x in range(int(cx - hw), int(cx + hw) + 1):
-            u = (x - cx) / max(1.0, hw)  # -1 left edge .. +1 right edge
-            # back (upper-left side) dark, belly (lower-right) pale
-            shade = 0.5 + 0.5 * u
-            r = lerp(34, 120, shade)
-            g = lerp(62, 185, shade)
-            b = lerp(128, 225, shade)
-            # vertical falloff: darker toward the head top
-            v = (y - y_min) / max(1.0, y_max - y_min)
-            r *= lerp(0.85, 1.05, v)
-            g *= lerp(0.85, 1.05, v)
-            b *= lerp(0.9, 1.05, v)
-            put(buf, x, y, r, g, b)
-        # bright rim light on the aurora-facing (upper-left) edge
-        rim = int(cx - hw)
-        for dx in range(6):
-            add(buf, rim + dx, y, 110, 240, 255, 0.55 * (1 - dx / 6.0))
-            add(buf, rim + dx, y, 60, 255, 190, 0.35 * (1 - dx / 6.0))
-
-    # Belly pleats: curved grooves following the spine, lower half of body.
-    for off in (0.25, 0.45, 0.65):
-        for k in range(0, 300):
-            t = 0.15 + 0.6 * k / 300.0
-            (sx, sy), hw = whale_spine(t), whale_half_width(t)
-            # offset toward the belly side (perpendicular, down-right)
-            px = sx + hw * off * 0.55
-            py = sy + hw * off * 0.75
-            add(buf, int(px), int(py), 30, 70, 110, 0.8)
-
-    # Pectoral fin: long fin sweeping down-left from mid-body.
-    mx, my = whale_spine(0.42)
-    fill_ellipse(buf, mx - 120, my + 130, 130, 26, 40, 74, 135)
-    fill_ellipse(buf, mx - 120, my + 128, 118, 19, 62, 105, 170)
-
-    # Eye near the head, with a glint.
-    hx, hy = whale_spine(0.92)
-    fill_ellipse(buf, hx + 18, hy - 6, 9, 11, 8, 12, 22)
-    fill_ellipse(buf, hx + 20, hy - 9, 3, 4, 230, 245, 255)
-
-    # Blowhole spray above the head: two fountains of droplets.
-    for _ in range(90):
-        a = rng.uniform(-0.9, 0.9)
-        d = rng.uniform(10, 130)
-        x = int(hx - 10 + a * d * 0.9)
-        y = int(hy - 40 - d * rng.uniform(0.4, 1.0))
-        br = 150 + 105 * rng.random()
-        add(buf, x, y, br * 0.85, br * 0.95, br, 0.9)
-
-
-def draw_spray(buf):
-    """Water bursting where the whale leaves the sea, and droplets along it."""
-    tx, ty = whale_spine(0.0)
-    # big splash crown at the waterline
-    for _ in range(320):
-        a = rng.uniform(-math.pi, 0.0)
-        d = rng.uniform(20, 240)
-        x = int(tx + math.cos(a) * d)
-        y = int(ty + 40 + math.sin(a) * d * 0.45)
-        br = 140 + 115 * rng.random()
-        add(buf, x, y, br * 0.8, br * 0.95, br, 0.85)
-    # droplets trailing the body
-    for k in range(140):
-        t = rng.uniform(0.05, 0.75)
-        (sx, sy), hw = whale_spine(t), whale_half_width(t)
-        side = rng.choice((-1, 1))
-        x = int(sx + side * (hw + rng.uniform(4, 60)))
-        y = int(sy + rng.uniform(-30, 40))
-        br = 130 + 125 * rng.random()
-        add(buf, x, y, br * 0.8, br * 0.95, br, 0.8)
-    # glow halo around the head where it meets the aurora
-    hx, hy = whale_spine(0.95)
-    for _ in range(120):
-        a = rng.uniform(0, 2 * math.pi)
-        d = rng.uniform(40, 170)
-        x = int(hx + math.cos(a) * d)
-        y = int(hy + math.sin(a) * d * 0.8)
-        add(buf, x, y, 60, 255, 190, 0.25)
-
-
-def draw_stars(buf):
-    for _ in range(420):
-        x = rng.randrange(W)
-        y = rng.randrange(560)
-        s = rng.random()
-        bright = 120 + 135 * s
-        size = 1 if s < 0.8 else 2
-        for dx in range(size):
-            for dy in range(size):
-                add(buf, x + dx, y + dy, bright, bright, bright * 0.95)
-        if s > 0.94:
-            # cross sparkle
-            add(buf, x - 1, y, bright * 0.5, bright * 0.5, bright * 0.5)
-            add(buf, x + size, y, bright * 0.5, bright * 0.5, bright * 0.5)
-            add(buf, x, y - 1, bright * 0.5, bright * 0.5, bright * 0.5)
-            add(buf, x, y + size, bright * 0.5, bright * 0.5, bright * 0.5)
-
-
-def write_png(buf, path):
-    raw = bytearray()
-    for y in range(H):
-        raw.append(0)  # filter none
-        for x in range(W):
-            i = (y * W + x) * 3
-            raw.append(int(clamp(buf[i])))
-            raw.append(int(clamp(buf[i + 1])))
-            raw.append(int(clamp(buf[i + 2])))
-
-    def chunk(typ, data):
-        c = struct.pack(">I", len(data)) + typ + data
-        c += struct.pack(">I", zlib.crc32(typ + data) & 0xFFFFFFFF)
-        return c
-
-    png = b"\x89PNG\r\n\x1a\n"
-    png += chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
-    png += chunk(b"IDAT", zlib.compress(bytes(raw), 6))
-    png += chunk(b"IEND", b"")
-    with open(path, "wb") as f:
-        f.write(png)
+            sx = x + int(16 * math.sin(y * 0.05 + x * 0.012))
+            if sx < 0:
+                sx = 0
+            elif sx >= W:
+                sx = W - 1
+            my = 2 * HORIZON - y
+            r, g, b = img.get(sx, my)
+            base = 10 + int(8 * (1 - depth))
+            wr = int(r * dim * 0.9) + base
+            wg = int(g * dim * 0.9) + base + 4
+            wb = int(b * dim) + base + 14
+            # Horizontal wave banding.
+            wave = math.sin(y * 0.33 + 2.0 * math.sin(x * 0.02))
+            if wave > 0.86:
+                wr = int(wr * 0.55)
+                wg = int(wg * 0.55)
+                wb = int(wb * 0.6)
+            img.set(x, y, clamp(wr), clamp(wg), clamp(wb))
 
 
 def main():
-    buf = make_canvas()
-    draw_sky(buf)
-    draw_aurora(buf)
-    draw_stars(buf)
-    towers = draw_city(buf)
-    draw_water(buf, towers)
-    draw_whale(buf)
-    draw_spray(buf)
-    out = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(out, exist_ok=True)
-    write_png(buf, os.path.join(out, "entry.png"))
+    img = Img(W, H)
+    rnd = random.Random(SEED)
+    draw_sky(img)
+    draw_stars(img, rnd)
+    draw_aurora(img)
+def fill_ellipse(img, cx, cy, rx, ry, angle_deg, color):
+    """Fill a rotated ellipse; color is (r, g, b) or a callable(y)->(r,g,b)."""
+    a = math.radians(angle_deg)
+    ca, sa = math.cos(a), math.sin(a)
+    ex = int(abs(rx * ca) + abs(ry * sa)) + 1
+    ey = int(abs(rx * sa) + abs(ry * ca)) + 1
+    arx, ary = float(rx), float(ry)
+    A = (ca / arx) ** 2 + (sa / ary) ** 2
+    for y in range(max(0, cy - ey), min(H, cy + ey + 1)):
+        dy = y - cy
+        B = 2 * dy * (ca * sa / arx ** 2 - sa * ca / ary ** 2)
+        C = dy * dy * ((sa / arx) ** 2 + (ca / ary) ** 2) - 1
+        disc = B * B - 4 * A * C
+        if disc < 0:
+            continue
+        sq = math.sqrt(disc)
+        x1 = int(cx + (-B - sq) / (2 * A))
+        x2 = int(cx + (-B + sq) / (2 * A))
+        col = color(y) if callable(color) else color
+        for x in range(max(0, x1), min(W, x2 + 1)):
+            img.set(x, y, col[0], col[1], col[2])
+
+
+def draw_whale(img, rnd):
+    # Breaching humpback, arched up to the right, head high, tail low-left.
+    # Rim-light trick: draw a bright copy first, then the body 5 px lower,
+    # leaving a pale crescent along the top edge.
+    rim = (150, 235, 255)
+    body = (44, 68, 112)
+    belly = (100, 140, 185)
+    # Tail stock + flukes.
+    fill_ellipse(img, 335, 705, 115, 46, -18, (30, 48, 86))
+    fill_ellipse(img, 238, 692, 82, 26, -28, (30, 48, 86))
+    fill_ellipse(img, 322, 782, 78, 26, 38, (34, 52, 90))
+    # Pectoral fin.
+    fill_ellipse(img, 600, 648, 92, 26, 58, (28, 44, 80))
+    # Body with rim light, head rostrum, belly.
+    fill_ellipse(img, 540, 495, 252, 96, -38, rim)
+    fill_ellipse(img, 540, 500, 252, 96, -38, body)
+    fill_ellipse(img, 700, 325, 92, 56, -38, rim)
+    fill_ellipse(img, 700, 330, 92, 56, -38, (44, 66, 110))
+    fill_ellipse(img, 505, 545, 225, 68, -38, belly)
+    # Back shading: darker ridge hugging the dorsal edge of the body.
+    fill_ellipse(img, 491, 437, 200, 30, -38, (30, 48, 86))
+    # Eye.
+    ex, ey = 688, 318
+    for dy in range(-4, 5):
+        for dx in range(-4, 5):
+            if dx * dx + dy * dy <= 16:
+                img.set(ex + dx, ey + dy, 235, 245, 255)
+    img.set(ex, ey, 8, 10, 22)
+    # Throat grooves: pale curved lines on the belly.
+    for k in range(5):
+        gy = 560 + k * 12
+        for x in range(430, 640):
+            yy = int(gy + 0.12 * (x - 535) + 0.0004 * (x - 535) ** 2)
+            img.add(x, yy, 30, 48, 66)
+    # Spray: droplets bursting around the breach and along the body.
+    for _ in range(150):
+        ang = rnd.uniform(0, 2 * math.pi)
+        dist = rnd.uniform(10, 190)
+        x = int(430 + dist * math.cos(ang) * 1.15)
+        y = int(775 + dist * math.sin(ang) * 0.75 - 40)
+        s = rnd.random()
+        v = 200 + int(55 * s)
+        r = 1 if s < 0.6 else 2
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy <= r * r:
+                    img.add(x + dx, y + dy, v, v, int(v * 0.98))
+    # Splash crown at the waterline.
+    for _ in range(90):
+        x = int(rnd.gauss(430, 130))
+        y = int(786 + rnd.random() * 14)
+        img.add(x, y, 220, 235, 255)
+        img.add(x, y + 1, 140, 170, 210)
+    # Soft glow around the whale's upper body (aurora-lit).
+    cx, cy, rad = 610, 400, 320
+    for y in range(max(0, cy - rad), min(H, cy + rad + 1)):
+        for x in range(max(0, cx - rad), min(W, cx + rad + 1)):
+            d2 = (x - cx) ** 2 + (y - cy) ** 2
+            if d2 < rad * rad:
+                f = 1 - math.sqrt(d2) / rad
+                img.add(x, y, int(10 * f * f), int(26 * f * f), int(30 * f * f))
+
+
+def main():
+    img = Img(W, H)
+    rnd = random.Random(SEED)
+    draw_sky(img)
+    draw_stars(img, rnd)
+    draw_aurora(img)
+    draw_city(img, rnd)
+    draw_water(img)
+    draw_whale(img, rnd)
+    out = os.path.join(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"), "entry.png")
+    img.png(out)
 
 
 if __name__ == "__main__":
